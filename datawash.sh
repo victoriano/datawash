@@ -46,6 +46,9 @@ if [[ "$sample_choice" == "y" || "$sample_choice" == "Y" ]]; then
     read -p "Enter the number of samples to be taken: " N_SAMPLES
 fi
 
+# Get the current date and time
+DATE_TIME=$(date "+%Y%m%d-%H%M%S")
+
 # Convert file to desired format, with or without sampling
 python -c "
 import pandas as pd
@@ -72,20 +75,30 @@ if '$filter_choice' == 'y' or '$filter_choice' == 'Y':
 if '$sample_choice' == 'y' or '$sample_choice' == 'Y':
     df = df.sample(n=int('$N_SAMPLES'))
 
+output_file = '${FILE_PATH%.*}'
+
+if '$filter_choice' == 'y' or '$filter_choice' == 'Y':
+    output_file += '_filtered'
+
+if '$sample_choice' == 'y' or '$sample_choice' == 'Y':
+    output_file += '_sample_$N_SAMPLES'
+
+output_file += '_$DATE_TIME.$OUTPUT_FORMAT'
+
 if '$OUTPUT_FORMAT' == 'csv':
-    df.to_csv('${FILE_PATH%.*}_sample_$N_SAMPLES.$OUTPUT_FORMAT', index=False)
+    df.to_csv(output_file, index=False)
 elif '$OUTPUT_FORMAT' == 'parquet':
-    df.to_parquet('${FILE_PATH%.*}_sample_$N_SAMPLES.$OUTPUT_FORMAT', engine='pyarrow')
+    df.to_parquet(output_file, engine='pyarrow')
 elif '$OUTPUT_FORMAT' == 'xlsx':
-    df.to_excel('${FILE_PATH%.*}_sample_$N_SAMPLES.$OUTPUT_FORMAT', engine='openpyxl')
+    df.to_excel(output_file, engine='openpyxl')
 "
 
 # Check if the command was successful
 if [ $? -eq 0 ]; then
     if [[ "$sample_choice" == "y" || "$sample_choice" == "Y" ]]; then
-        echo "File with $N_SAMPLES samples created successfully at ${FILE_PATH%.*}_sample_$N_SAMPLES.$OUTPUT_FORMAT!"
+        echo "File with $N_SAMPLES samples created successfully at ${FILE_PATH%.*}_sample_$N_SAMPLES_$DATE_TIME.$OUTPUT_FORMAT!"
     else
-        echo "File created successfully at ${FILE_PATH%.*}.$OUTPUT_FORMAT!"
+        echo "File created successfully at ${FILE_PATH%.*}_$DATE_TIME.$OUTPUT_FORMAT!"
     fi
 else
     echo "Failed to create file!"
