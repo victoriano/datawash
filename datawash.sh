@@ -12,13 +12,42 @@ FILE_EXT="${FILE_PATH##*.}"
 # Ask the user for the desired output format
 read -p "Enter the desired output format (csv, excel, parquet): " OUTPUT_FORMAT
 
+# Ask the user if they want to filter by a column
+read -p "Do you want to filter by a column? (y/n) " filter_choice
+
+FILTER_COLUMN=""
+FILTER_VALUE=""
+FILTER_CONDITION=""
+
+if [[ "$filter_choice" == "y" || "$filter_choice" == "Y" ]]; then
+    python -c "
+import pandas as pd
+
+if '$FILE_EXT' == 'csv':
+    df = pd.read_csv('$FILE_PATH', low_memory=False)
+elif '$FILE_EXT' == 'xlsx':
+    df = pd.read_excel('$FILE_PATH', engine='openpyxl')
+elif '$FILE_EXT' == 'parquet':
+    df = pd.read_parquet('$FILE_PATH')
+
+print('Columns:', ', '.join(df.columns))
+"
+    read -p "Enter the column to filter by: " FILTER_COLUMN
+    read -p "Enter the condition (contains, does not contain, >, <, =): " FILTER_CONDITION
+    read -p "Enter the value to filter by: " FILTER_VALUE
+fi
+
 # Ask the user if they want to sample
-read -p "Do you want to take a random sample? (y/n) " choice
+read -p "Do you want to take a random sample? (y/n) " sample_choice
+
+N_SAMPLES=""
+
+if [[ "$sample_choice" == "y" || "$sample_choice" == "Y" ]]; then
+    read -p "Enter the number of samples to be taken: " N_SAMPLES
+fi
 
 # Convert file to desired format, with or without sampling
-if [[ "$choice" == "y" || "$choice" == "Y" ]]; then
-    read -p "Enter the number of samples to be taken: " N_SAMPLES
-    python -c "
+python -c "
 import pandas as pd
 
 if '$FILE_EXT' == 'csv':
@@ -28,38 +57,32 @@ elif '$FILE_EXT' == 'xlsx':
 elif '$FILE_EXT' == 'parquet':
     df = pd.read_parquet('$FILE_PATH')
 
-sample_df = df.sample(n=int('$N_SAMPLES'))
+if '$filter_choice' == 'y' or '$filter_choice' == 'Y':
+    if '$FILTER_CONDITION' == 'contains':
+        df = df[df['$FILTER_COLUMN'].str.contains('$FILTER_VALUE')]
+    elif '$FILTER_CONDITION' == 'does not contain':
+        df = df[~df['$FILTER_COLUMN'].str.contains('$FILTER_VALUE')]
+    elif '$FILTER_CONDITION' == '>':
+        df = df[df['$FILTER_COLUMN'] > float('$FILTER_VALUE')]
+    elif '$FILTER_CONDITION' == '<':
+        df = df[df['$FILTER_COLUMN'] < float('$FILTER_VALUE')]
+    elif '$FILTER_CONDITION' == '=':
+        df = df[df['$FILTER_COLUMN'] == float('$FILTER_VALUE')]
+
+if '$sample_choice' == 'y' or '$sample_choice' == 'Y':
+    df = df.sample(n=int('$N_SAMPLES'))
 
 if '$OUTPUT_FORMAT' == 'csv':
-    sample_df.to_csv('${FILE_PATH%.*}_sample_$N_SAMPLES.$OUTPUT_FORMAT', index=False)
+    df.to_csv('${FILE_PATH%.*}_sample_$N_SAMPLES.$OUTPUT_FORMAT', index=False)
 elif '$OUTPUT_FORMAT' == 'parquet':
-    sample_df.to_parquet('${FILE_PATH%.*}_sample_$N_SAMPLES.$OUTPUT_FORMAT', engine='pyarrow')
+    df.to_parquet('${FILE_PATH%.*}_sample_$N_SAMPLES.$OUTPUT_FORMAT', engine='pyarrow')
 elif '$OUTPUT_FORMAT' == 'xlsx':
-    sample_df.to_excel('${FILE_PATH%.*}_sample_$N_SAMPLES.$OUTPUT_FORMAT', engine='openpyxl')
+    df.to_excel('${FILE_PATH%.*}_sample_$N_SAMPLES.$OUTPUT_FORMAT', engine='openpyxl')
 "
-else
-    python -c "
-import pandas as pd
-
-if '$FILE_EXT' == 'csv':
-    df = pd.read_csv('$FILE_PATH', low_memory=False)
-elif '$FILE_EXT' == 'xlsx':
-    df = pd.read_excel('$FILE_PATH', engine='openpyxl')
-elif '$FILE_EXT' == 'parquet':
-    df = pd.read_parquet('$FILE_PATH')
-
-if '$OUTPUT_FORMAT' == 'csv':
-    df.to_csv('${FILE_PATH%.*}.$OUTPUT_FORMAT', index=False)
-elif '$OUTPUT_FORMAT' == 'parquet':
-    df.to_parquet('${FILE_PATH%.*}.$OUTPUT_FORMAT', engine='pyarrow')
-elif '$OUTPUT_FORMAT' == 'xlsx':
-    df.to_excel('${FILE_PATH%.*}.$OUTPUT_FORMAT', engine='openpyxl')
-"
-fi
 
 # Check if the command was successful
 if [ $? -eq 0 ]; then
-    if [[ "$choice" == "y" || "$choice" == "Y" ]]; then
+    if [[ "$sample_choice" == "y" || "$sample_choice" == "Y" ]]; then
         echo "File with $N_SAMPLES samples created successfully at ${FILE_PATH%.*}_sample_$N_SAMPLES.$OUTPUT_FORMAT!"
     else
         echo "File created successfully at ${FILE_PATH%.*}.$OUTPUT_FORMAT!"
